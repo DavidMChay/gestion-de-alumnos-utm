@@ -178,9 +178,8 @@ export default function App() {
 const NavItem = ({ active, onClick, icon, label }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-left ${
-      active ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
-    }`}
+    className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-left ${active ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+      }`}
   >
     {icon}
     <span>{label}</span>
@@ -295,6 +294,32 @@ const renderTableRow = (tab, item, idx, onEdit, onDelete) => {
           </td>
         </tr>
       );
+
+    case 'materia':
+      return (
+        <tr key={item.id} className="hover:bg-slate-50">
+          <td className="px-6 py-4 font-medium">{item.nombre}</td>
+          <td className="px-6 py-4">{item.semestre}</td>
+          <td className="px-6 py-4">
+            {item.profesor?.nombre || 'Sin profesor'}
+          </td>
+          <td className="px-6 py-4 flex gap-3">
+            <button
+              onClick={() => onEdit(item)}
+              className="text-blue-600 hover:text-blue-800"
+            >
+              <Edit2 size={18} />
+            </button>
+            <button
+              onClick={() => onDelete(item.id, 'materia')}
+              className="text-red-600 hover:text-red-800"
+            >
+              <Trash2 size={18} />
+            </button>
+          </td>
+        </tr>
+      );
+
 
     default:
       return null;
