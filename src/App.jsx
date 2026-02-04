@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Users,
   GraduationCap,
@@ -8,18 +8,15 @@ import {
   Trash2,
   FileText,
   BarChart3,
-  ChevronRight,
-  Save,
-  X
+  ChevronRight
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import ModalForm from './ModalForm';
 
 /* ================= SUPABASE ================= */
 
 const SUPABASE_URL = 'https://bzycknurunbdehwcjhdu.supabase.co';
-const SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6eWNrbnVydW5iZGVod2NqaGR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMTQyNzQsImV4cCI6MjA4NTc5MDI3NH0.-BBiUFFM1oy9CBzvFV2OnV9YZyb9YVz88ARN9ZjwEys';
-
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6eWNrbnVydW5iZGVod2NqaGR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMTQyNzQsImV4cCI6MjA4NTc5MDI3NH0.-BBiUFFM1oy9CBzvFV2OnV9YZyb9YVz88ARN9ZjwEys';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ================= APP ================= */
@@ -27,95 +24,119 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export default function App() {
   const [activeTab, setActiveTab] = useState('alumnos');
   const [data, setData] = useState([]);
-  const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(false);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-
-  const [alumnoForm, setAlumnoForm] = useState({
-    nombre: '',
-    apellido: '',
-    matricula: '',
-    fecha_nacimiento: '',
-    id_carrera: ''
-  });
-
-  /* ================= DATA ================= */
+  const [form, setForm] = useState({});
+  const [formConfig, setFormConfig] = useState(null);
 
   useEffect(() => {
     fetchData();
-    fetchCarreras();
   }, [activeTab]);
-
-  const fetchCarreras = async () => {
-    const { data, error } = await supabase.from('carrera').select('*');
-    if (!error) setCarreras(data);
-  };
 
   const fetchData = async () => {
     setLoading(true);
 
-    let query;
+    let result;
 
     switch (activeTab) {
       case 'alumnos':
-        query = supabase.from('alumnos').select('*, carrera(nombre)');
+        result = await supabase
+          .from('alumnos')
+          .select('id, nombre, apellido, matricula, id_carrera, carrera(nombre)');
         break;
+
       case 'carreras':
-        query = supabase.from('carrera').select('*');
+        result = await supabase.from('carrera').select('*');
         break;
+
       case 'materia':
-        query = supabase.from('materia').select('*, profesor(nombre)');
+        result = await supabase.from('materia').select('*');
         break;
+
       case 'kardex':
-        query = supabase.from('inscripcion').select(`
-          periodo,
-          alumnos(nombre, apellido, matricula, carrera(nombre)),
-          materia(nombre),
-          calificacion(calificacion)
-        `);
+        result = await supabase.from('vista_kardex').select('*');
         break;
+
       case 'reportes':
-        query = supabase.from('alumnos').select(`
-          nombre,
-          apellido,
-          inscripcion(calificacion(calificacion))
-        `);
+        result = await supabase.from('vista_promedios').select('*');
         break;
+
       default:
         setLoading(false);
         return;
     }
 
-    const { data, error } = await query;
-    if (!error) setData(data);
+    setData(result.data || []);
     setLoading(false);
   };
 
-  /* ================= CRUD ================= */
+  /* ================= MODAL ================= */
 
-  const handleSaveAlumno = async (e) => {
+  const openModal = (table, item = null) => {
+    setEditingItem(item);
+
+    if (item) {
+      const clean = { ...item };
+      delete clean.carrera;
+      setForm(clean);
+    } else {
+      setForm({});
+    }
+
+    const configs = {
+      alumnos: {
+        title: item ? 'Editar Alumno' : 'Nuevo Alumno',
+        table: 'alumnos',
+        fields: [
+          { name: 'nombre', label: 'Nombre' },
+          { name: 'apellido', label: 'Apellido' },
+          { name: 'matricula', label: 'Matrícula' },
+          { name: 'fecha_nacimiento', label: 'Fecha Nacimiento', type: 'date' },
+          { name: 'id_carrera', label: 'ID Carrera' }
+        ]
+      },
+      carreras: {
+        title: item ? 'Editar Carrera' : 'Nueva Carrera',
+        table: 'carrera',
+        fields: [
+          { name: 'nombre', label: 'Nombre' },
+          { name: 'duracion_anios', label: 'Duración (años)' }
+        ]
+      },
+      materia: {
+        title: item ? 'Editar Materia' : 'Nueva Materia',
+        table: 'materia',
+        fields: [
+          { name: 'nombre', label: 'Nombre' },
+          { name: 'semestre', label: 'Semestre' }
+        ]
+      }
+    };
+
+    setFormConfig(configs[table]);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e) => {
     e.preventDefault();
 
     if (editingItem) {
-      await supabase.from('alumnos').update(alumnoForm).eq('id', editingItem.id);
+      await supabase
+        .from(formConfig.table)
+        .update(form)
+        .eq('id', editingItem.id);
     } else {
-      await supabase.from('alumnos').insert(alumnoForm);
+      await supabase.from(formConfig.table).insert(form);
     }
 
     setIsModalOpen(false);
     setEditingItem(null);
-    setAlumnoForm({
-      nombre: '',
-      apellido: '',
-      matricula: '',
-      fecha_nacimiento: '',
-      id_carrera: ''
-    });
     fetchData();
   };
 
-  const deleteItem = async (id, table) => {
+  const handleDelete = async (id, table) => {
     if (!confirm('¿Eliminar este registro?')) return;
     await supabase.from(table).delete().eq('id', id);
     fetchData();
@@ -124,204 +145,118 @@ export default function App() {
   /* ================= UI ================= */
 
   return (
-    <div className="min-h-screen w-full flex bg-slate-50">
-      {/* SIDEBAR */}
+    <div className="min-h-screen flex">
       <aside className="w-64 bg-slate-900 text-white p-6">
-        <div className="flex items-center gap-3 mb-8">
-          <GraduationCap className="text-blue-400 w-8 h-8" />
-          <h1 className="text-xl font-bold">UTM Alumnos</h1>
-        </div>
-
-        <NavItem active={activeTab === 'alumnos'} onClick={() => setActiveTab('alumnos')} icon={<Users />} label="Alumnos" />
-        <NavItem active={activeTab === 'carreras'} onClick={() => setActiveTab('carreras')} icon={<GraduationCap />} label="Carreras" />
-        <NavItem active={activeTab === 'materia'} onClick={() => setActiveTab('materia')} icon={<BookOpen />} label="materia" />
-        <div className="my-4 border-t border-slate-700" />
-        <NavItem active={activeTab === 'kardex'} onClick={() => setActiveTab('kardex')} icon={<FileText />} label="Kardex" />
-        <NavItem active={activeTab === 'reportes'} onClick={() => setActiveTab('reportes')} icon={<BarChart3 />} label="Reportes" />
+        <Nav label="Alumnos" icon={<Users />} onClick={() => setActiveTab('alumnos')} />
+        <Nav label="Carreras" icon={<GraduationCap />} onClick={() => setActiveTab('carreras')} />
+        <Nav label="Materias" icon={<BookOpen />} onClick={() => setActiveTab('materia')} />
+        <Nav label="Kardex" icon={<FileText />} onClick={() => setActiveTab('kardex')} />
+        <Nav label="Reportes" icon={<BarChart3 />} onClick={() => setActiveTab('reportes')} />
       </aside>
 
-      {/* MAIN */}
-      <main className="flex-1 p-10 overflow-y-auto">
-        <header className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold capitalize">{activeTab}</h2>
-          {activeTab === 'alumnos' && (
+      <main className="flex-1 p-10">
+        <header className="flex justify-between mb-6">
+          <h2 className="text-2xl font-bold capitalize">{activeTab}</h2>
+          {['alumnos', 'carreras', 'materia'].includes(activeTab) && (
             <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              onClick={() => openModal(activeTab)}
+              className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2"
             >
-              <Plus /> Nuevo Alumno
+              <Plus /> Nuevo
             </button>
           )}
         </header>
 
-        <div className="bg-white rounded-xl border overflow-x-auto">
-          {loading ? (
-            <div className="p-20 text-center">Cargando...</div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-slate-50">{renderTableHeader(activeTab)}</thead>
-              <tbody>
-                {data.map((item, idx) =>
-                  renderTableRow(activeTab, item, idx, setEditingItem, deleteItem)
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
+        {loading ? (
+          <p>Cargando...</p>
+        ) : (
+          <table className="w-full bg-white rounded shadow">
+            <tbody>
+
+              {activeTab === 'alumnos' && data.map(a => (
+                <tr key={a.id}>
+                  <td className="p-3 border">{a.nombre}</td>
+                  <td className="p-3 border">{a.apellido}</td>
+                  <td className="p-3 border">{a.matricula}</td>
+                  <td className="p-3 border">{a.carrera?.nombre ?? '—'}</td>
+                  <td className="p-3 border flex gap-2">
+                    <Edit2 onClick={() => openModal('alumnos', a)} />
+                    <Trash2 onClick={() => handleDelete(a.id, 'alumnos')} />
+                  </td>
+                </tr>
+              ))}
+
+              {activeTab === 'carreras' && data.map(c => (
+                <tr key={c.id}>
+                  <td className="p-3 border">{c.nombre}</td>
+                  <td className="p-3 border">{c.duracion_anios}</td>
+                  <td className="p-3 border flex gap-2">
+                    <Edit2 onClick={() => openModal('carreras', c)} />
+                    <Trash2 onClick={() => handleDelete(c.id, 'carrera')} />
+                  </td>
+                </tr>
+              ))}
+
+              {activeTab === 'materia' && data.map(m => (
+                <tr key={m.id}>
+                  <td className="p-3 border">{m.nombre}</td>
+                  <td className="p-3 border">{m.semestre}</td>
+                  <td className="p-3 border flex gap-2">
+                    <Edit2 onClick={() => openModal('materia', m)} />
+                    <Trash2 onClick={() => handleDelete(m.id, 'materia')} />
+                  </td>
+                </tr>
+              ))}
+
+              {activeTab === 'kardex' && data.map((k, i) => (
+                <tr key={i}>
+                  <td className="p-3 border">{k.matricula}</td>
+                  <td className="p-3 border">{k.alumno}</td>
+                  <td className="p-3 border">{k.carrera}</td>
+                  <td className="p-3 border">{k.materia}</td>
+                  <td className="p-3 border">{k.calificacion}</td>
+                  <td className="p-3 border">{k.periodo}</td>
+                </tr>
+              ))}
+
+              {activeTab === 'reportes' && data.map(r => (
+                <tr key={r.id}>
+                  <td className="p-3 border">{r.nombre} {r.apellido}</td>
+                  <td className="p-3 border">{Number(r.promedio).toFixed(2)}</td>
+                  <td className="p-3 border">
+                    {r.promedio >= 8 ? 'APROBADO' : 'RIESGO'}
+                  </td>
+                </tr>
+              ))}
+
+            </tbody>
+          </table>
+        )}
       </main>
+
+      {isModalOpen && formConfig && (
+        <ModalForm
+          title={formConfig.title}
+          fields={formConfig.fields}
+          form={form}
+          setForm={setForm}
+          onSave={handleSave}
+          onClose={() => setIsModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
-/* ================= HELPERS ================= */
+/* ================= NAV ================= */
 
-const NavItem = ({ active, onClick, icon, label }) => (
+const Nav = ({ label, icon, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-left ${active ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
-      }`}
+    className="flex items-center gap-3 mb-4 text-slate-300 hover:text-white w-full"
   >
     {icon}
-    <span>{label}</span>
-    {active && <ChevronRight className="ml-auto" />}
+    {label}
+    <ChevronRight className="ml-auto" />
   </button>
 );
-
-
-const renderTableHeader = (tab) => {
-  const headers = {
-    alumnos: ['Nombre', 'Matrícula', 'Fecha Nac.', 'Carrera', 'Acciones'],
-    carreras: ['ID', 'Nombre', 'Duración', 'Acciones'],
-    materia: ['Materia', 'Semestre', 'Profesor', 'Acciones'],
-    kardex: ['Alumno', 'Matrícula', 'Materia', 'Periodo', 'Calificación'],
-    reportes: ['Alumno', 'Promedio', 'Estado']
-  };
-
-  return (
-    <tr>
-      {headers[tab]?.map((h) => (
-        <th
-          key={h}
-          className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"
-        >
-          {h}
-        </th>
-      ))}
-    </tr>
-  );
-};
-
-const renderTableRow = (tab, item, idx, onEdit, onDelete) => {
-  switch (tab) {
-    case 'alumnos':
-      return (
-        <tr key={item.id} className="hover:bg-slate-50">
-          <td className="px-6 py-4 font-medium">
-            {item.nombre} {item.apellido}
-          </td>
-          <td className="px-6 py-4">{item.matricula}</td>
-          <td className="px-6 py-4">{item.fecha_nacimiento}</td>
-          <td className="px-6 py-4">
-            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-              {item.carrera?.nombre || 'N/A'}
-            </span>
-          </td>
-          <td className="px-6 py-4 flex gap-3">
-            <button
-              onClick={() => onEdit(item)}
-              className="text-blue-600 hover:text-blue-800"
-            >
-              <Edit2 size={18} />
-            </button>
-            <button
-              onClick={() => onDelete(item.id, 'alumnos')}
-              className="text-red-600 hover:text-red-800"
-            >
-              <Trash2 size={18} />
-            </button>
-          </td>
-        </tr>
-      );
-
-    case 'carreras':
-      return (
-        <tr key={item.id}>
-          <td className="px-6 py-4">{item.id}</td>
-          <td className="px-6 py-4 font-bold">{item.nombre}</td>
-          <td className="px-6 py-4">{item.duracion_anios} años</td>
-          <td className="px-6 py-4 text-slate-400">—</td>
-        </tr>
-      );
-
-    case 'kardex':
-      return (
-        <tr key={idx}>
-          <td className="px-6 py-4">
-            {item.alumnos?.nombre} {item.alumnos?.apellido}
-          </td>
-          <td className="px-6 py-4">{item.alumnos?.matricula}</td>
-          <td className="px-6 py-4">{item.materia?.nombre}</td>
-          <td className="px-6 py-4">{item.periodo}</td>
-          <td className="px-6 py-4 font-bold">
-            {item.calificacion?.[0]?.calificacion ?? 'Pte'}
-          </td>
-        </tr>
-      );
-
-    case 'reportes':
-      const califs =
-        item.inscripcion?.flatMap((i) =>
-          i.calificacion?.map((c) => c.calificacion)
-        ) || [];
-
-      const promedio =
-        califs.length > 0
-          ? (califs.reduce((a, b) => a + b, 0) / califs.length).toFixed(2)
-          : '0.00';
-
-      return (
-        <tr key={idx}>
-          <td className="px-6 py-4">
-            {item.nombre} {item.apellido}
-          </td>
-          <td className="px-6 py-4 font-bold">{promedio}</td>
-          <td className="px-6 py-4">
-            {promedio >= 8 ? (
-              <span className="text-green-700 font-bold">APROBADO</span>
-            ) : (
-              <span className="text-orange-600 font-bold">RIESGO</span>
-            )}
-          </td>
-        </tr>
-      );
-
-    case 'materia':
-      return (
-        <tr key={item.id} className="hover:bg-slate-50">
-          <td className="px-6 py-4 font-medium">{item.nombre}</td>
-          <td className="px-6 py-4">{item.semestre}</td>
-          <td className="px-6 py-4">
-            {item.profesor?.nombre || 'Sin profesor'}
-          </td>
-          <td className="px-6 py-4 flex gap-3">
-            <button
-              onClick={() => onEdit(item)}
-              className="text-blue-600 hover:text-blue-800"
-            >
-              <Edit2 size={18} />
-            </button>
-            <button
-              onClick={() => onDelete(item.id, 'materia')}
-              className="text-red-600 hover:text-red-800"
-            >
-              <Trash2 size={18} />
-            </button>
-          </td>
-        </tr>
-      );
-
-
-    default:
-      return null;
-  }
-};
